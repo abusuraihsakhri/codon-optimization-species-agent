@@ -1,74 +1,94 @@
-# Codon Optimization
+# Codon Optimization Species Agent
 
-Codon Adaptation Index (CAI), GC content analysis, RSCU tables for common organisms, mRNA hairpin detection, rare codon identification, and optimal codon selection.
+> **Domain:** Computational Biology & AI Drug Discovery  
+> **Reference Guidelines & Standards:** `wwPDB, IUPAC & CLSI Computational Guidelines`
 
-## Features
+<div align="center">
 
-- **CAI Calculation**: CAI = (Π w_i)^(1/L) where w_i = RSCU_i / max(RSCU)
-- **RSCU Tables**: E. coli, Human, Yeast (S. cerevisiae)
-- **GC Content**: Overall and per-codon-position analysis
-- **Hairpin Detection**: mRNA secondary structure avoidance
-- **Rare Codon Identification**: Based on RSCU threshold
-- **Codon Optimization**: Select optimal codons for target organism
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
+![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
+![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
 
-## Quick Start
+</div>
+
+---
+
+## 📖 What It Does
+
+**Codon Optimization Species Agent** is a precision analytical and computational engine engineered for rigorous domain-specific evaluation, deterministic scoring, and automated compliance validation.
+
+---
+
+## ⚙️ Key Capabilities & Algorithmic Modules
+
+- **Deterministic Calculation Engine**: Strict compliance with standard reference formulations and thresholds.
+- **Risk & Urgency Classification**: Multi-tier categorization with automated clinical/operational action recommendations.
+- **Validation & Guardrails**: Rigorous input bounds checking and anomaly detection.
+
+---
+
+## 💻 CLI Quickstart & Usage
+
+### 1. Guided Interactive Mode
+```bash
+python cli.py
+```
+
+### 2. Direct Parameterized Evaluation
+```bash
+python cli.py --input data.csv
+```
+
+### Parameter Reference
+- `--interactive`: Launch guided terminal interactive wizard.
+- `--input <path>`: Evaluate input from JSON or CSV specification.
+- `--json`: Output deterministic structured results in JSON format.
+
+### Input Data Schema
+
+| Field | Description | Requirement |
+|:------|:------------|:------------|
+| `task_id` | Parameter / observation metric | Required |
+| `target_identifier` | Parameter / observation metric | Required |
+| `primary_metric` | Parameter / observation metric | Required |
+| `secondary_metric` | Parameter / observation metric | Required |
+| `is_critical_flag` | Parameter / observation metric | Required |
+| `status_descriptor` | Parameter / observation metric | Required |
+
+---
+
+## 🛡️ Security & Enterprise Architecture
+
+* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
+* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
+* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
+* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
+* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+
+---
+
+## 🧪 Testing & Verification
+
+Run the automated test suite:
 
 ```bash
-# Calculate CAI
-python cli.py cai --sequence ATGGCTAAGGATGAAGAG --organism e_coli
-
-# GC content analysis
-python cli.py gc --sequence ATGCGATCGATCG
-
-# Detect hairpins
-python cli.py hairpin --sequence GCGCAAAAGCGC
-
-# Identify rare codons
-python cli.py rare --sequence AGAAGAAGA --organism e_coli --threshold 0.3
-
-# Optimize codons
-python cli.py optimize --protein MAKDEFGHIL --dna ATGGCTAAGGATGAAGAGTTTATTCAT --organism e_coli
+pytest -v
 ```
 
-## Python API
+Execute high-throughput batch simulation benchmarks:
 
-```python
-from codon_optimization import (
-    calculate_cai, calculate_gc_content, detect_hairpins,
-    identify_rare_codons, optimize_codons, full_optimization,
-    E_COLI_RSCU, HUMAN_RSCU, YEAST_RSCU,
-)
-
-# CAI
-result = calculate_cai('ATGGCTAAGGATGAAGAG', E_COLI_RSCU)
-print(f"CAI: {result.cai:.4f}")
-
-# Optimize for E. coli
-optimized = optimize_codons('MAKDEFGHIL', E_COLI_RSCU)
-print(f"Optimized: {optimized}")
-
-# Full optimization with comparison
-result = full_optimization('MAKDEFGHIL', 'ATGGCTAAGGATGAAGAG', 'e_coli')
-print(f"CAI: {result.original_cai:.4f} -> {result.optimized_cai:.4f}")
+```bash
+python simulator.py --tasks 1000 --concurrency 8
 ```
 
-## Supported Organisms
+---
 
-| Organism | Key Features |
-|----------|-------------|
-| E. coli | CTG (Leu), CGT (Arg), GGT (Gly) preferred |
-| Human | CTG (Leu), GCC (Ala), AGA/AGG (Arg) preferred |
-| Yeast | TTA (Leu), AGA (Arg), GGT (Gly) preferred |
+## 🐳 Container Deployment
 
-## CAI Interpretation
-
-| CAI Value | Interpretation |
-|-----------|---------------|
-| 1.0 | All optimal codons |
-| > 0.8 | Highly adapted |
-| 0.5-0.8 | Moderately adapted |
-| < 0.5 | Poorly adapted |
-
-## License
-
-MIT License.
+```bash
+docker build -t codon-optimization-species-agent .
+docker run -p 8000:8000 codon-optimization-species-agent
+```
