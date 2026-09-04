@@ -357,3 +357,30 @@ def test_cli_hairpin():
     """Test CLI hairpin command."""
     from codon_optimization.cli import main
     assert main(['hairpin', '--sequence', 'GCGCAAAAGCGC']) == 0
+
+
+def test_cli_batch(tmp_path):
+    """Test CLI batch optimization with temporary CSV files."""
+    from codon_optimization.cli import main
+    in_csv = tmp_path / "test_in.csv"
+    out_csv = tmp_path / "test_out.csv"
+    in_csv.write_text(
+        "sequence_id,gene_name,organism,dna_sequence,protein_sequence\n"
+        "T1,gene1,e_coli,ATGGCTAAGGATGAAGAG,MAKDEE\n"
+        "T2,gene2,human,,MVHL\n",
+        encoding="utf-8"
+    )
+    res = main(['batch', '-i', str(in_csv), '-o', str(out_csv)])
+    assert res == 0
+    assert out_csv.exists()
+    content = out_csv.read_text(encoding="utf-8")
+    assert "optimized_cai" in content
+    assert "T1" in content
+    assert "T2" in content
+
+
+def test_cli_batch_missing_file():
+    """Test CLI batch error handling on missing input."""
+    from codon_optimization.cli import main
+    assert main(['batch', '-i', 'non_existent_file_xyz.csv', '-o', 'out.csv']) == 1
+

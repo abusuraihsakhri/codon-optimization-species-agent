@@ -164,6 +164,96 @@ def cmd_optimize(args):
     return 0
 
 
+import csv
+from pathlib import Path
+
+
+def cmd_batch(args):
+    """Run batch codon optimization or CAI evaluation on a CSV file."""
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"Error: Input file {args.input} not found.", file=sys.stderr)
+        return 1
+
+    rows_out = []
+    with open(input_path, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for idx, row in enumerate(reader, start=1):
+            seq_id = row.get("sequence_id") or f"SEQ_{idx:03d}"
+            gene = row.get("gene_name", "unnamed")
+            org = row.get("organism") or args.organism
+            dna = row.get("dna_sequence", "").strip()
+            prot = row.get("protein_sequence", "").strip()
+
+            rscu = ORGANISM_RSCU.get(org, ORGANISM_RSCU.get("e_coli"))
+            orig_cai = 0.0
+            orig_gc = 0.0
+            if dna and len(dna) % 3 == 0:
+                try:
+                    cai_res = calculate_cai(dna, rscu)
+                    orig_cai = round(cai_res.cai, 4)
+                    orig_gc = round(calculate_gc_content(dna), 4)
+                except Exception:
+                    pass
+
+            opt_dna = ""
+            opt_cai = 0.0
+            opt_gc = 0.0
+            num_changes = 0
+            if prot:
+                try:
+                    opt_dna = optimize_codons(prot, rscu)
+                    opt_cai = round(calculate_cai(opt_dna, rscu).cai, 4)
+                    opt_gc = round(calculate_gc_content(opt_dna), 4)
+                    if dna:
+                        full_res = full_optimization(prot, dna, target_organism=org)
+                        num_changes = full_res.num_changes
+                except Exception:
+                    pass
+            elif dna and orig_cai > 0:
+                # If only DNA provided, derive protein and optimize
+                try:
+                    derived_aa = []
+                    for c_idx in range(0, len(dna) - 2, 3):
+                        derived_aa.append(CODON_TABLE.get(dna[c_idx:c_idx+3], "X"))
+                    prot = "".join(derived_aa)
+                    opt_dna = optimize_codons(prot, rscu)
+                    opt_cai = round(calculate_cai(opt_dna, rscu).cai, 4)
+                    opt_gc = round(calculate_gc_content(opt_dna), 4)
+                    full_res = full_optimization(prot, dna, target_organism=org)
+                    num_changes = full_res.num_changes
+                except Exception:
+                    pass
+
+            rows_out.append({
+                "sequence_id": seq_id,
+                "gene_name": gene,
+                "organism": org,
+                "original_cai": orig_cai,
+                "optimized_cai": opt_cai,
+                "original_gc": orig_gc,
+                "optimized_gc": opt_gc,
+                "num_changes": num_changes,
+                "optimized_dna": opt_dna,
+            })
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "sequence_id", "gene_name", "organism",
+        "original_cai", "optimized_cai",
+        "original_gc", "optimized_gc",
+        "num_changes", "optimized_dna",
+    ]
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows_out)
+
+    print(f"Batch processing completed: {len(rows_out)} sequences written to {args.output}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog='codon-optimization-species-agent',
@@ -203,6 +293,12 @@ def main(argv=None):
     p_opt.add_argument('--dna', required=True, help='Original DNA sequence')
     p_opt.add_argument('--organism', default='e_coli', choices=list(ORGANISM_RSCU.keys()))
     p_opt.add_argument('--json', action='store_true', help='JSON output')
+
+    # Batch
+    p_batch = subparsers.add_parser('batch', help='Batch optimize sequences from CSV')
+    p_batch.add_argument('-i', '--input', required=True, help='Input CSV file path')
+    p_batch.add_argument('-o', '--output', required=True, help='Output CSV file path')
+    p_batch.add_argument('--organism', default='e_coli', choices=list(ORGANISM_RSCU.keys()), help='Target host organism')
     
     args = parser.parse_args(argv)
     
@@ -212,6 +308,7 @@ def main(argv=None):
         'hairpin': cmd_hairpin,
         'rare': cmd_rare,
         'optimize': cmd_optimize,
+        'batch': cmd_batch,
     }
     
     return commands[args.command](args)
@@ -219,3 +316,4 @@ def main(argv=None):
 
 if __name__ == '__main__':
     sys.exit(main())
+
