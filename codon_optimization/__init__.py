@@ -1,7 +1,7 @@
 """
 Codon Optimization: CAI, GC content, RSCU, hairpin detection, rare codons.
 """
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 from .engine import (
     CAIResult, GCContentResult, HairpinResult, RareCodon, OptimizationResult,
