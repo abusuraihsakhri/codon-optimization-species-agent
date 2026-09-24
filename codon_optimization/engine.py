@@ -224,7 +224,7 @@ def calculate_cai(dna_sequence: str, rscu_table: Dict[str, float]) -> CAIResult:
     
     CAI = (Π w_i)^(1/L)
     where w_i = RSCU_i / max(RSCU for that amino acid)
-    L = number of codons (excluding start/stop)
+    L = number of scored sense codons (stop codons are excluded)
     
     Args:
         dna_sequence: DNA coding sequence (must be multiple of 3)
@@ -468,12 +468,12 @@ def optimize_codons(protein_sequence: str, rscu_table: Dict[str, float],
     """Optimize a protein sequence's codons for a target organism.
     
     For each amino acid, selects the codon with the highest RSCU value.
-    Optionally adjusts for GC content target.
+    The current implementation performs RSCU-only optimization. GC-targeted\n    optimization is intentionally rejected rather than silently ignored.
     
     Args:
         protein_sequence: Amino acid sequence
         rscu_table: RSCU values for target organism
-        gc_target: Target GC content (0-1), or None for pure CAI optimization
+        gc_target: Reserved parameter. Non-None values currently raise NotImplementedError
     Returns:
         Optimized DNA sequence
     """
