@@ -107,6 +107,35 @@ ORGANISM_RSCU = {
 }
 
 
+def _normalize_nucleotide_sequence(sequence: str, *, require_codon_aligned: bool = False) -> str:
+    """Normalize DNA/RNA text and reject ambiguous or invalid symbols.
+
+    RNA uracil is accepted and converted to thymine. Whitespace is ignored.
+    """
+    if not isinstance(sequence, str):
+        raise TypeError("Sequence must be a string")
+
+    normalized = "".join(sequence.split()).upper().replace("U", "T")
+    invalid = sorted(set(normalized) - set("ACGT"))
+    if invalid:
+        raise ValueError(f"Sequence contains invalid base(s): {', '.join(invalid)}")
+    if require_codon_aligned and len(normalized) % 3 != 0:
+        raise ValueError(f"Sequence length ({len(normalized)}) must be a multiple of 3")
+    return normalized
+
+
+def _normalize_protein_sequence(sequence: str) -> str:
+    """Normalize a protein sequence and validate the standard amino-acid alphabet."""
+    if not isinstance(sequence, str):
+        raise TypeError("Protein sequence must be a string")
+
+    normalized = "".join(sequence.split()).upper()
+    invalid = sorted(set(normalized) - set("ACDEFGHIKLMNPQRSTVWY*"))
+    if invalid:
+        raise ValueError(f"Protein sequence contains invalid residue(s): {', '.join(invalid)}")
+    return normalized
+
+
 # --- Data Models ---
 
 @dataclass
@@ -133,7 +162,7 @@ class HairpinResult:
     has_hairpin: bool
     position: int
     stem_length: int
-    free_energy: float  # simplified
+    free_energy: float  # heuristic pseudo-energy score; not a thermodynamic ΔG estimate
     sequence: str
 
 
@@ -203,10 +232,7 @@ def calculate_cai(dna_sequence: str, rscu_table: Dict[str, float]) -> CAIResult:
     Returns:
         CAIResult with CAI value and per-codon scores
     """
-    sequence = dna_sequence.upper().replace(' ', '').replace('\n', '')
-    
-    if len(sequence) % 3 != 0:
-        raise ValueError(f"Sequence length ({len(sequence)}) must be a multiple of 3")
+    sequence = _normalize_nucleotide_sequence(dna_sequence, require_codon_aligned=True)
     
     # Calculate max RSCU per amino acid
     max_rscu = {}
@@ -260,7 +286,7 @@ def calculate_cai(dna_sequence: str, rscu_table: Dict[str, float]) -> CAIResult:
 
 def calculate_gc_content(dna_sequence: str) -> float:
     """Calculate overall GC content as a fraction."""
-    seq = dna_sequence.upper().replace(' ', '').replace('\n', '')
+    seq = _normalize_nucleotide_sequence(dna_sequence)
     if len(seq) == 0:
         return 0.0
     gc = sum(1 for b in seq if b in 'GC')
@@ -269,7 +295,7 @@ def calculate_gc_content(dna_sequence: str) -> float:
 
 def gc_content_by_position(dna_sequence: str) -> Dict[int, float]:
     """Calculate GC content at each codon position (1, 2, 3)."""
-    seq = dna_sequence.upper().replace(' ', '').replace('\n', '')
+    seq = _normalize_nucleotide_sequence(dna_sequence)
     counts = {1: [0, 0], 2: [0, 0], 3: [0, 0]}
     
     for i, base in enumerate(seq):
@@ -286,7 +312,7 @@ def gc_content_by_position(dna_sequence: str) -> Dict[int, float]:
 
 def analyze_gc_content(dna_sequence: str) -> GCContentResult:
     """Full GC content analysis."""
-    seq = dna_sequence.upper().replace(' ', '').replace('\n', '')
+    seq = _normalize_nucleotide_sequence(dna_sequence)
     gc = sum(1 for b in seq if b in 'GC')
     return GCContentResult(
         gc_content=gc / len(seq) if seq else 0.0,
@@ -306,10 +332,16 @@ def detect_hairpins(dna_sequence: str, min_stem: int = 4,
     - A stem (complementary base pairing)
     - A loop (unpaired region)
     
-    Uses simple Watson-Crick complementarity (A-U/T, G-C).
-    Minimum stem length: 4 bp.
+    Uses simple Watson-Crick complementarity (A-U/T, G-C). This is a
+    sequence heuristic only; the returned free_energy field is a
+    pseudo-energy score and must not be interpreted as thermodynamic ΔG.
     """
-    seq = dna_sequence.upper().replace(' ', '').replace('\n', '')
+    if min_stem < 1:
+        raise ValueError("min_stem must be at least 1")
+    if max_loop < 3:
+        raise ValueError("max_loop must be at least 3")
+
+    seq = _normalize_nucleotide_sequence(dna_sequence)
     # Convert T to U for RNA
     rna = seq.replace('T', 'U')
     
@@ -338,7 +370,7 @@ def detect_hairpins(dna_sequence: str, min_stem: int = 4,
                 
                 # Require at least 70% complementarity
                 if matches >= stem_len * 0.7:
-                    # Simplified free energy: -1.5 kcal/mol per GC pair, -1.0 per AU pair
+                    # Heuristic pseudo-energy: stronger GC matches receive a larger penalty.
                     energy = 0.0
                     for j in range(stem_len):
                         left_base = rna[left_start + j]
@@ -379,7 +411,7 @@ def identify_rare_codons(dna_sequence: str, rscu_table: Dict[str, float],
     Returns:
         List of RareCodon objects
     """
-    seq = dna_sequence.upper().replace(' ', '').replace('\n', '')
+    seq = _normalize_nucleotide_sequence(dna_sequence, require_codon_aligned=True)
     rare = []
     
     for i in range(0, len(seq) - 2, 3):
@@ -445,9 +477,17 @@ def optimize_codons(protein_sequence: str, rscu_table: Dict[str, float],
     Returns:
         Optimized DNA sequence
     """
+    if gc_target is not None:
+        if not 0 <= gc_target <= 1:
+            raise ValueError("gc_target must be between 0 and 1")
+        raise NotImplementedError(
+            "gc_target optimization is not implemented; omit gc_target for RSCU-based optimization"
+        )
+
+    protein = _normalize_protein_sequence(protein_sequence)
     optimized = []
     
-    for aa in protein_sequence.upper():
+    for aa in protein:
         if aa == '*':
             # Stop codon - pick the most common one
             stop_codons = ['TAA', 'TAG', 'TGA']
@@ -473,18 +513,33 @@ def full_optimization(protein_sequence: str, original_dna: str,
     3. Calculate CAI of optimized sequence
     4. Compare GC content
     """
-    rscu = ORGANISM_RSCU.get(target_organism, E_COLI_RSCU)
-    
-    original_cai = calculate_cai(original_dna, rscu)
-    optimized_dna = optimize_codons(protein_sequence, rscu)
+    if target_organism not in ORGANISM_RSCU:
+        valid = ", ".join(sorted(ORGANISM_RSCU))
+        raise ValueError(f"Unknown target organism '{target_organism}'. Choose one of: {valid}")
+
+    rscu = ORGANISM_RSCU[target_organism]
+    protein = _normalize_protein_sequence(protein_sequence)
+    orig_upper = _normalize_nucleotide_sequence(original_dna, require_codon_aligned=True)
+
+    translated = "".join(
+        CODON_TABLE[orig_upper[i:i + 3]]
+        for i in range(0, len(orig_upper), 3)
+    )
+    if translated != protein:
+        raise ValueError(
+            "Protein sequence does not match translation of the supplied coding DNA "
+            f"(DNA translates to '{translated}', protein is '{protein}')"
+        )
+
+    original_cai = calculate_cai(orig_upper, rscu)
+    optimized_dna = optimize_codons(protein, rscu)
     optimized_cai = calculate_cai(optimized_dna, rscu)
     
-    original_gc = calculate_gc_content(original_dna)
+    original_gc = calculate_gc_content(orig_upper)
     optimized_gc = calculate_gc_content(optimized_dna)
     
     # Track changes
     changes = []
-    orig_upper = original_dna.upper().replace(' ', '').replace('\n', '')
     for i in range(0, min(len(orig_upper), len(optimized_dna)) - 2, 3):
         orig_codon = orig_upper[i:i+3]
         opt_codon = optimized_dna[i:i+3]
