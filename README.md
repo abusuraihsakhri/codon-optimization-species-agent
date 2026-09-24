@@ -1,5 +1,7 @@
 # Codon Optimization Species Agent
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/codon-optimization-species-agent/)
+
 A dependency-free Python toolkit for codon-usage analysis and deterministic synonymous-codon optimization using bundled reference RSCU tables for *Escherichia coli*, human, and *Saccharomyces cerevisiae*.
 
 The same Python analysis engine is used by the command-line interface and the browser application.
