@@ -4,24 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codon-optimization-species-engine"
-version = "2.0.0"
-description = "CodonCraft: Multi-Species Codon Adaptation Index (CAI) Optimizer"
+version = "3.0.1"
+description = "Dependency-free codon-usage analysis and RSCU-based optimization utilities"
 readme = "README.md"
-authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
+authors = [{ name = "Abu Suraih Sakhri" }]
 license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Topic :: Security/Cryptography",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
 
 [project.scripts]
 codon-optimization-species-engine = "codon_optimization.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/abusuraihsakhri/codon-optimization-species-engine"
-Repository = "https://github.com/abusuraihsakhri/codon-optimization-species-engine.git"
+Homepage = "https://github.com/abusuraihsakhri/codon-optimization-species-agent"
+Repository = "https://github.com/abusuraihsakhri/codon-optimization-species-agent.git"
