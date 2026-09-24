@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Browser-based codon usage analysis and RSCU-based sequence optimization for E. coli, human, and S. cerevisiae reference tables.">
+  <title>Codon Optimization Species Agent</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script src="https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js" defer></script>
+  <script src="./assets/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">CG</div>
+        <div>
+          <h1>Codon Optimization</h1>
+          <p>CAI, GC content, rare-codon screening, and deterministic host adaptation</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="runtimeStatus" class="status-pill loading" role="status">Loading Python runtime…</span>
+        <button id="themeToggle" class="icon-button" type="button" aria-label="Switch to dark theme" title="Toggle theme">◐</button>
+      </div>
+    </header>
+
+    <nav class="mobile-tabs" aria-label="Workspace">
+      <button class="mobile-tab active" type="button" data-panel="inputPanel">Input</button>
+      <button class="mobile-tab" type="button" data-panel="resultsPanel">Results</button>
+    </nav>
+
+    <main class="workspace">
+      <section id="inputPanel" class="panel input-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Sequence input</span>
+            <h2>Analyze a coding sequence</h2>
+          </div>
+          <button id="sampleButton" class="text-button" type="button">Load sample</button>
+        </div>
+
+        <div class="form-grid compact">
+          <label class="field">
+            <span>Target host</span>
+            <select id="organism">
+              <option value="e_coli">E. coli</option>
+              <option value="human">Human</option>
+              <option value="yeast">S. cerevisiae</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Rare-codon RSCU threshold</span>
+            <input id="threshold" type="number" min="0" max="6" step="0.05" value="0.30" inputmode="decimal">
+          </label>
+        </div>
+
+        <label class="field grow-field">
+          <span>Coding DNA or RNA <small>unambiguous A/C/G/T/U; codon-aligned</small></span>
+          <textarea id="dnaSequence" spellcheck="false" autocomplete="off" placeholder="ATGGCTAAGGATGAA…"></textarea>
+          <span id="dnaMeta" class="field-meta">0 nt · 0 codons</span>
+        </label>
+
+        <label class="field protein-field">
+          <span>Protein sequence <small>optional; derived from DNA when blank</small></span>
+          <textarea id="proteinSequence" spellcheck="false" autocomplete="off" placeholder="MAKDE…"></textarea>
+        </label>
+
+        <div id="inputError" class="inline-error" role="alert" hidden></div>
+
+        <div class="action-row">
+          <button id="analyzeButton" class="primary-button" type="button" disabled>
+            <span>Analyze sequence</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <button id="clearButton" class="secondary-button" type="button">Clear</button>
+        </div>
+
+        <p class="privacy-note">
+          Analysis runs locally in your browser. The page downloads the Pyodide runtime once; entered sequences are not sent to this repository or a backend.
+        </p>
+      </section>
+
+      <section id="resultsPanel" class="panel results-panel mobile-hidden">
+        <div class="panel-heading result-heading">
+          <div>
+            <span class="eyebrow">Analysis output</span>
+            <h2 id="resultTitle">Ready for analysis</h2>
+          </div>
+          <div class="result-actions">
+            <button id="copyButton" class="text-button" type="button" disabled>Copy DNA</button>
+            <button id="downloadButton" class="text-button" type="button" disabled>Export JSON</button>
+          </div>
+        </div>
+
+        <div class="metric-grid" aria-live="polite">
+          <article class="metric-card">
+            <span>CAI</span>
+            <strong id="caiValue">—</strong>
+            <small id="caiDelta">Reference-adapted index</small>
+          </article>
+          <article class="metric-card">
+            <span>GC content</span>
+            <strong id="gcValue">—</strong>
+            <small id="gcPositions">GC1 — · GC2 — · GC3 —</small>
+          </article>
+          <article class="metric-card">
+            <span>Rare codons</span>
+            <strong id="rareValue">—</strong>
+            <small id="rareDetail">Below selected RSCU threshold</small>
+          </article>
+          <article class="metric-card">
+            <span>Hairpin heuristic</span>
+            <strong id="hairpinValue">—</strong>
+            <small id="hairpinDetail">Sequence-only screen</small>
+          </article>
+        </div>
+
+        <div class="result-grid">
+          <article class="result-block sequence-block">
+            <div class="block-heading">
+              <div>
+                <span class="eyebrow">Optimized coding DNA</span>
+                <h3 id="optimizedSummary">No result yet</h3>
+              </div>
+            </div>
+            <pre id="optimizedSequence" class="sequence-output" tabindex="0">Run an analysis to generate an RSCU-based sequence.</pre>
+            <div class="mini-stats">
+              <span id="optimizedCai">Optimized CAI —</span>
+              <span id="optimizedGc">Optimized GC —</span>
+              <span id="changeCount">Changes —</span>
+            </div>
+          </article>
+
+          <article class="result-block detail-block">
+            <div class="block-heading">
+              <div>
+                <span class="eyebrow">Rare-codon detail</span>
+                <h3 id="rareHeading">No result yet</h3>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Codon</th><th>AA</th><th>Position</th><th>RSCU</th></tr>
+                </thead>
+                <tbody id="rareTableBody">
+                  <tr><td colspan="4" class="empty-cell">No analysis yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+
+        <div class="method-note">
+          <strong>Interpretation:</strong> CAI and optimization use the repository's bundled simplified RSCU reference tables. The hairpin result is an inverted-repeat heuristic with a pseudo-energy score, not a thermodynamic folding prediction or experimental expression estimate.
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
