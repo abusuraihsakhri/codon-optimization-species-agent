@@ -8,10 +8,9 @@ version = "3.0.1"
 description = "Dependency-free codon-usage analysis and RSCU-based optimization utilities"
 readme = "README.md"
 authors = [{ name = "Abu Suraih Sakhri" }]
-license = { text = "MIT" }
+license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
@@ -27,3 +26,6 @@ codon-optimization-species-engine = "codon_optimization.cli:main"
 [project.urls]
 Homepage = "https://github.com/abusuraihsakhri/codon-optimization-species-agent"
 Repository = "https://github.com/abusuraihsakhri/codon-optimization-species-agent.git"
+
+[tool.setuptools]
+packages = ["codon_optimization"]
