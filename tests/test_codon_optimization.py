@@ -322,7 +322,7 @@ def test_full_optimization_different_organisms():
 def test_full_optimization_rejects_mismatched_protein_and_dna():
     """Change counts are only meaningful when DNA translates to the supplied protein."""
     with pytest.raises(ValueError, match="does not match translation"):
-        full_optimization('MAK', 'ATGGCTAAA', 'e_coli')
+        full_optimization('MAK', 'ATGGCTGAA', 'e_coli')
 
 
 def test_full_optimization_rejects_unknown_organism():
