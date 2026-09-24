@@ -6,6 +6,8 @@ import sys
 import math
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from codon_optimization.engine import (
@@ -91,11 +93,21 @@ def test_cai_different_organisms():
 
 def test_cai_invalid_length():
     """Sequence not multiple of 3 should raise error."""
-    try:
+    with pytest.raises(ValueError, match="multiple of 3"):
         calculate_cai('ATGGC', E_COLI_RSCU)
-        assert False, "Should have raised ValueError"
-    except ValueError:
-        pass
+
+
+def test_cai_accepts_rna_and_normalizes_uracil():
+    """RNA input should be normalized to DNA codons."""
+    rna = calculate_cai('AUGGCUAAG', E_COLI_RSCU)
+    dna = calculate_cai('ATGGCTAAG', E_COLI_RSCU)
+    assert rna.cai == dna.cai
+
+
+def test_cai_rejects_ambiguous_bases():
+    """Ambiguous bases must not be silently omitted from CAI."""
+    with pytest.raises(ValueError, match="invalid base"):
+        calculate_cai('ATGGCNAAG', E_COLI_RSCU)
 
 
 def test_cai_codon_scores():
@@ -224,11 +236,8 @@ def test_select_optimal_human():
 
 def test_select_optimal_unknown_aa():
     """Unknown amino acid should raise error."""
-    try:
+    with pytest.raises(ValueError, match="Unknown amino acid"):
         select_optimal_codon('X', E_COLI_RSCU)
-        assert False, "Should have raised ValueError"
-    except ValueError:
-        pass
 
 
 # --- Test Codon Optimization ---
@@ -274,9 +283,14 @@ def test_optimize_stop_codon():
     protein = 'MA*'
     optimized = optimize_codons(protein, E_COLI_RSCU)
     assert len(optimized) == 9
-    # Last codon should be a stop codon
     last_codon = optimized[6:9]
     assert CODON_TABLE.get(last_codon) == '*'
+
+
+def test_gc_target_is_not_silently_ignored():
+    """Unsupported GC-target optimization should fail explicitly."""
+    with pytest.raises(NotImplementedError, match="gc_target optimization is not implemented"):
+        optimize_codons('MAK', E_COLI_RSCU, gc_target=0.5)
 
 
 # --- Test Full Optimization ---
@@ -284,7 +298,7 @@ def test_optimize_stop_codon():
 def test_full_optimization():
     """Full optimization should return complete results."""
     protein = 'MAKDEFGHIL'
-    original_dna = 'ATGGCTAAGGATGAAGAGTTTATTCAT'
+    original_dna = 'ATGGCTAAGGATGAGTTTGGACATATACTA'
     result = full_optimization(protein, original_dna, 'e_coli')
     
     assert result.original_cai > 0
@@ -296,13 +310,24 @@ def test_full_optimization():
 def test_full_optimization_different_organisms():
     """Different target organisms should give different optimized sequences."""
     protein = 'MAKDEFGHIL'
-    original_dna = 'ATGGCTAAGGATGAAGAGTTTATTCAT'
+    original_dna = 'ATGGCTAAGGATGAGTTTGGACATATACTA'
     
     r_ecoli = full_optimization(protein, original_dna, 'e_coli')
     r_human = full_optimization(protein, original_dna, 'human')
     
     # Optimized sequences should differ (different optimal codons)
     assert r_ecoli.optimized_sequence != r_human.optimized_sequence
+
+
+def test_full_optimization_rejects_mismatched_protein_and_dna():
+    """Change counts are only meaningful when DNA translates to the supplied protein."""
+    with pytest.raises(ValueError, match="does not match translation"):
+        full_optimization('MAK', 'ATGGCTAAA', 'e_coli')
+
+
+def test_full_optimization_rejects_unknown_organism():
+    with pytest.raises(ValueError, match="Unknown target organism"):
+        full_optimization('MAK', 'ATGGCTAAA', 'mouse')
 
 
 # --- Test RSCU Calculation ---
@@ -367,7 +392,8 @@ def test_cli_batch(tmp_path):
     in_csv.write_text(
         "sequence_id,gene_name,organism,dna_sequence,protein_sequence\n"
         "T1,gene1,e_coli,ATGGCTAAGGATGAAGAG,MAKDEE\n"
-        "T2,gene2,human,,MVHL\n",
+        "T2,gene2,human,,MVHL\n"
+        "T3,gene3,e_coli,ATGGCTAAG,\n",
         encoding="utf-8"
     )
     res = main(['batch', '-i', str(in_csv), '-o', str(out_csv)])
@@ -377,6 +403,9 @@ def test_cli_batch(tmp_path):
     assert "optimized_cai" in content
     assert "T1" in content
     assert "T2" in content
+    assert "T3" in content
+    assert "status" in content
+    assert "error" not in content
 
 
 def test_cli_batch_missing_file():
@@ -384,3 +413,30 @@ def test_cli_batch_missing_file():
     from codon_optimization.cli import main
     assert main(['batch', '-i', 'non_existent_file_xyz.csv', '-o', 'out.csv']) == 1
 
+
+
+
+def test_cli_reports_validation_error(capsys):
+    """CLI should return a stable nonzero status instead of a traceback."""
+    from codon_optimization.cli import main
+    rc = main(['cai', '--sequence', 'ATGNNN', '--organism', 'e_coli'])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "invalid base" in captured.err
+
+
+def test_cli_batch_marks_invalid_rows(tmp_path):
+    """Batch mode should preserve the row and report validation failures."""
+    from codon_optimization.cli import main
+    in_csv = tmp_path / "bad.csv"
+    out_csv = tmp_path / "bad_out.csv"
+    in_csv.write_text(
+        "sequence_id,gene_name,organism,dna_sequence,protein_sequence\n"
+        "BAD1,gene_bad,e_coli,ATGNNN,MX\n",
+        encoding="utf-8",
+    )
+    rc = main(['batch', '-i', str(in_csv), '-o', str(out_csv)])
+    assert rc == 2
+    content = out_csv.read_text(encoding="utf-8")
+    assert "BAD1" in content
+    assert ",error," in content
