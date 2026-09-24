@@ -6,7 +6,7 @@ import json
 import sys
 
 from .engine import (
-    ORGANISM_RSCU,
+    CODON_TABLE, ORGANISM_RSCU,
     calculate_cai, calculate_gc_content, gc_content_by_position, analyze_gc_content,
     detect_hairpins, identify_rare_codons,
     select_optimal_codon, optimize_codons, full_optimization,
@@ -179,68 +179,77 @@ def cmd_batch(args):
     with open(input_path, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader, start=1):
-            seq_id = row.get("sequence_id") or f"SEQ_{idx:03d}"
-            gene = row.get("gene_name", "unnamed")
-            org = row.get("organism") or args.organism
-            dna = row.get("dna_sequence", "").strip()
-            prot = row.get("protein_sequence", "").strip()
+            seq_id = (row.get("sequence_id") or f"SEQ_{idx:03d}").strip()
+            gene = (row.get("gene_name") or "unnamed").strip()
+            org = (row.get("organism") or args.organism).strip()
+            dna = (row.get("dna_sequence") or "").strip()
+            prot = (row.get("protein_sequence") or "").strip()
 
-            rscu = ORGANISM_RSCU.get(org, ORGANISM_RSCU.get("e_coli"))
-            orig_cai = 0.0
-            orig_gc = 0.0
-            if dna and len(dna) % 3 == 0:
-                try:
-                    cai_res = calculate_cai(dna, rscu)
-                    orig_cai = round(cai_res.cai, 4)
-                    orig_gc = round(calculate_gc_content(dna), 4)
-                except Exception:
-                    pass
-
-            opt_dna = ""
-            opt_cai = 0.0
-            opt_gc = 0.0
+            original_cai = 0.0
+            original_gc = 0.0
+            optimized_dna = ""
+            optimized_cai = 0.0
+            optimized_gc = 0.0
             num_changes = 0
-            if prot:
-                try:
-                    opt_dna = optimize_codons(prot, rscu)
-                    opt_cai = round(calculate_cai(opt_dna, rscu).cai, 4)
-                    opt_gc = round(calculate_gc_content(opt_dna), 4)
+            status = "ok"
+            message = ""
+
+            try:
+                if org not in ORGANISM_RSCU:
+                    valid = ", ".join(sorted(ORGANISM_RSCU))
+                    raise ValueError(f"Unknown organism '{org}'. Choose one of: {valid}")
+                if not dna and not prot:
+                    raise ValueError("Provide dna_sequence, protein_sequence, or both")
+
+                rscu = ORGANISM_RSCU[org]
+
+                if dna:
+                    cai_res = calculate_cai(dna, rscu)
+                    original_cai = round(cai_res.cai, 4)
+                    original_gc = round(calculate_gc_content(dna), 4)
+
+                if prot:
+                    optimized_dna = optimize_codons(prot, rscu)
+                    optimized_cai = round(calculate_cai(optimized_dna, rscu).cai, 4)
+                    optimized_gc = round(calculate_gc_content(optimized_dna), 4)
+
                     if dna:
                         full_res = full_optimization(prot, dna, target_organism=org)
                         num_changes = full_res.num_changes
-                except Exception:
-                    pass
-            elif dna and orig_cai > 0:
-                # If only DNA provided, derive protein and optimize
-                try:
-                    derived_aa = []
-                    for c_idx in range(0, len(dna) - 2, 3):
-                        derived_aa.append(CODON_TABLE.get(dna[c_idx:c_idx+3], "X"))
-                    prot = "".join(derived_aa)
-                    opt_dna = optimize_codons(prot, rscu)
-                    opt_cai = round(calculate_cai(opt_dna, rscu).cai, 4)
-                    opt_gc = round(calculate_gc_content(opt_dna), 4)
-                    full_res = full_optimization(prot, dna, target_organism=org)
+                else:
+                    normalized_dna = "".join(dna.split()).upper().replace("U", "T")
+                    prot = "".join(
+                        CODON_TABLE[normalized_dna[i:i + 3]]
+                        for i in range(0, len(normalized_dna), 3)
+                    )
+                    optimized_dna = optimize_codons(prot, rscu)
+                    optimized_cai = round(calculate_cai(optimized_dna, rscu).cai, 4)
+                    optimized_gc = round(calculate_gc_content(optimized_dna), 4)
+                    full_res = full_optimization(prot, normalized_dna, target_organism=org)
                     num_changes = full_res.num_changes
-                except Exception:
-                    pass
+
+            except (ValueError, TypeError, NotImplementedError) as exc:
+                status = "error"
+                message = str(exc)
 
             rows_out.append({
                 "sequence_id": seq_id,
                 "gene_name": gene,
                 "organism": org,
-                "original_cai": orig_cai,
-                "optimized_cai": opt_cai,
-                "original_gc": orig_gc,
-                "optimized_gc": opt_gc,
+                "status": status,
+                "message": message,
+                "original_cai": original_cai,
+                "optimized_cai": optimized_cai,
+                "original_gc": original_gc,
+                "optimized_gc": optimized_gc,
                 "num_changes": num_changes,
-                "optimized_dna": opt_dna,
+                "optimized_dna": optimized_dna,
             })
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
-        "sequence_id", "gene_name", "organism",
+        "sequence_id", "gene_name", "organism", "status", "message",
         "original_cai", "optimized_cai",
         "original_gc", "optimized_gc",
         "num_changes", "optimized_dna",
@@ -250,9 +259,12 @@ def cmd_batch(args):
         writer.writeheader()
         writer.writerows(rows_out)
 
-    print(f"Batch processing completed: {len(rows_out)} sequences written to {args.output}")
-    return 0
-
+    errors = sum(row["status"] == "error" for row in rows_out)
+    print(
+        f"Batch processing completed: {len(rows_out)} sequences written to {args.output}"
+        + (f" ({errors} row error(s))" if errors else "")
+    )
+    return 0 if errors == 0 else 2
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -311,7 +323,11 @@ def main(argv=None):
         'batch': cmd_batch,
     }
     
-    return commands[args.command](args)
+    try:
+        return commands[args.command](args)
+    except (ValueError, TypeError, NotImplementedError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == '__main__':
